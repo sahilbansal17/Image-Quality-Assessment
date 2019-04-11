@@ -6,6 +6,9 @@ import os.path as path
 from scipy.optimize import curve_fit
 from pandas.plotting import table
 
+def fitScores(x, a, b, c, d, e):
+    return a*(0.5-(1.0/(1.0 + np.exp(b*(x-c))))) + d*x + e
+
 # read all images
 imgs = []
 rgbimgs = []
@@ -20,19 +23,16 @@ for img in glob.glob("./dataset/*.png"):
 # np array of images
 # print shape of image array
 imgids,imgs = zip(*sorted(zip(imgids,imgs)))
-# imgids, rgbimgs = zip(*sorted(zip(imgids,rgbimgs)))
 imgs = np.array(imgs)
 imgids = np.array(imgids)
-# rgbimgs = np.array(rgbimgs)
 print(imgids.shape)
 print(imgs.shape)
-# print(rgbimgs.shape)
 
 # read all subjective scores
 subjective_scores = np.array(pd.read_excel("./dataset/DMOS_DIBR.xlsx", index_col=None, header=None),dtype=np.float64)[:,0]
 print(subjective_scores.shape)
 
-# numpy array to store all objective scores
+# numpy array to store all objective scores`
 objective_scores = np.zeros(subjective_scores.shape, dtype=np.float64)
 print(objective_scores.shape)
 
@@ -55,9 +55,8 @@ def operation(name, img):
         "sobelxy" : cv2.Sobel(img, cv2.CV_64F, 1, 1, ksize=3),
     }
     return operationDict[name]
-        
-# opertationsNameList = ["median", "erosion", "opening", "closing", "gradient", "tophat", "blackhat","laplacian", "sobelx", "sobely"]
-opertationsNameList = ["blackhat"]
+
+opertationsNameList = ["median", "erosion", "opening", "closing", "gradient", "tophat", "blackhat","laplacian", "sobelx", "sobely", "sobelxy"]
 operationBestResult = [0]*len(opertationsNameList)
 
 for j in range(len(opertationsNameList)):
@@ -72,12 +71,25 @@ for j in range(len(opertationsNameList)):
             temp = np.array(imgs[i], dtype=np.float32) - np.array(operation(opertationsNameList[j], imgs[i]), dtype=np.float32)
             temp = np.abs(temp)
             # temp = cv2.filter2D(temp,-1,lowpass)
-
             ret,threshImg = cv2.threshold(temp, k, 255, cv2.THRESH_BINARY)
-            objective_scores[i] =  np.std(threshImg)
+            objective_scores[i] = np.std(threshImg)
         
         result = np.corrcoef(subjective_scores, objective_scores)[0, 1]
-        
+        param = np.zeros(5, dtype=np.float64)
+        if(result > 0):
+            param[0] = np.abs(np.max(subjective_scores) - np.min(subjective_scores))
+        else:
+            param[0] = np.abs(np.min(subjective_scores) - np.max(subjective_scores))
+        param[1] = 40.0/np.std(objective_scores)
+        param[2] = np.mean(objective_scores)
+        param[3] = 1.0
+        param[4] = np.mean(subjective_scores)
+
+        if(opertationsNameList[j] == "blackhat"):
+            popt, pcov = curve_fit(fitScores, objective_scores, subjective_scores, param, maxfev=1000)
+            objective_scores = fitScores(objective_scores, *popt)
+            result = np.corrcoef(subjective_scores, objective_scores)[0, 1]
+
         if(best < np.abs(result)):
             wait = 0
             best = np.abs(result)
@@ -93,4 +105,4 @@ ax = plt.subplot(111, frame_on=False) # no visible frame
 ax.xaxis.set_visible(False)  # hide the x axis
 ax.yaxis.set_visible(False)  # hide the y axis
 table(ax, outputTable)  # where df is your data frame
-# plt.show()
+plt.show()
