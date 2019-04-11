@@ -1,0 +1,5 @@
+.DS_Store
+dataset/*.png
+.ipynb_checkpoints
+dataset/*.xlsx
+dataset/*.m
